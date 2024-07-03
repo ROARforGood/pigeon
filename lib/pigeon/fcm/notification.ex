@@ -441,15 +441,4 @@ defimpl Pigeon.Encodable, for: Pigeon.FCM.Notification do
 
     Pigeon.json_library().encode!(payload)
   end
-
-  defp encode_attr(map, _key, nil), do: map
-
-  defp encode_attr(map, key, val) do
-    Map.put(map, key, val)
-  end
-
-  defp recipient_attr([regid]), do: %{"to" => regid}
-
-  defp recipient_attr(regid) when is_list(regid),
-    do: %{"registration_ids" => regid}
 end

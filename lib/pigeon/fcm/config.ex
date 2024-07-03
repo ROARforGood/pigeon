@@ -56,7 +56,7 @@ defimpl Pigeon.Configurable, for: Pigeon.FCM.Config do
   import Pigeon.Tasks, only: [process_on_response: 2]
 
   alias Pigeon.Encodable
-  alias Pigeon.FCM.{Config, ResultParser}
+  alias Pigeon.FCM.Config
 
   @type sock :: {:sslsocket, any, pid | {any, any}}
 
@@ -155,7 +155,7 @@ defimpl Pigeon.Configurable, for: Pigeon.FCM.Config do
   def close(_config) do
   end
 
-  def validate!(%{project_id: project_id, auth_mfa: {m, f, a}}) when is_binary(project_id) do
+  def validate!(%{project_id: project_id, auth_mfa: {_m, _f, _a}}) when is_binary(project_id) do
     :ok
   end
 
@@ -168,7 +168,7 @@ defimpl Pigeon.Configurable, for: Pigeon.FCM.Config do
   # no on_response callback, ignore
   def parse_result(_id, _response, nil, _notif), do: :ok
 
-  def parse_result(_id, %{"name" => name}, on_response, notif) do
+  def parse_result(_id, %{"name" => _name}, on_response, notif) do
     process_on_response(on_response, %{ notif | response: :success})
   end
 
