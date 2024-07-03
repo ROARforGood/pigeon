@@ -1,16 +1,18 @@
 defmodule Pigeon.FCM.Config do
   @moduledoc "FCM Configuration for Pigeon"
 
-  defstruct key: nil,
-            uri: 'fcm.googleapis.com',
+  defstruct uri: 'fcm.googleapis.com',
             port: 443,
-            name: nil
+            name: nil,
+            project_id: nil,
+            auth_mfa: nil
 
   @type t :: %__MODULE__{
-          key: binary,
           name: term,
           port: pos_integer,
-          uri: charlist
+          uri: charlist,
+          project_id: binary,
+          auth_mfa: {atom, atom, list(term)}
         }
 
   @doc ~S"""
@@ -20,19 +22,21 @@ defmodule Pigeon.FCM.Config do
 
       iex> Pigeon.FCM.Config.new(
       ...>   name: :test,
-      ...>   key: "fcm_key",
       ...>   uri: 'test.server.example.com',
       ...>   port: 5228
+      ...>   project_id: "my-project-id",
+      ...>   auth_mfa: {Goth, :fetch!, [MyApp.Goth]}
       ...> )
-      %Pigeon.FCM.Config{key: "fcm_key", name: :test,
-      port: 5228, uri: 'test.server.example.com'}
+      %Pigeon.FCM.Config{name: :test,
+      port: 5228, uri: 'test.server.example.com'...}
   """
   def new(opts) when is_list(opts) do
     %__MODULE__{
       name: opts[:name],
-      key: opts[:key],
       uri: Keyword.get(opts, :uri, 'fcm.googleapis.com'),
-      port: Keyword.get(opts, :port, 443)
+      port: Keyword.get(opts, :port, 443),
+      project_id: Keyword.fetch!(opts, :project_id),
+      auth_mfa: Keyword.fetch!(opts, :auth_mfa)
     }
   end
 
@@ -89,11 +93,12 @@ defimpl Pigeon.Configurable, for: Pigeon.FCM.Config do
   def add_port(opts, %Config{port: 443}), do: opts
   def add_port(opts, %Config{port: port}), do: [{:port, port} | opts]
 
-  def push_headers(%Config{key: key}, _notification, opts) do
+  def push_headers(%Config{project_id: project_id, auth_mfa: {m, f, a}}, _notification, _opts) do
+    token = Kernel.apply(m, f, a).token
     [
       {":method", "POST"},
-      {":path", "/fcm/send"},
-      {"authorization", "key=#{opts[:key] || key}"},
+      {":path", "/v1/projects/#{project_id}/messages:send"},
+      {"authorization", "Bearer #{token}"},
       {"content-type", "application/json"},
       {"accept", "application/json"}
     ]
@@ -150,32 +155,25 @@ defimpl Pigeon.Configurable, for: Pigeon.FCM.Config do
   def close(_config) do
   end
 
-  def validate!(%{key: key}) when is_binary(key) do
+  def validate!(%{project_id: project_id, auth_mfa: {m, f, a}}) when is_binary(project_id) do
     :ok
   end
 
   def validate!(config) do
     raise Pigeon.ConfigError,
-      reason: "attempted to start without valid key",
-      config: redact(config)
+      reason: "attempted to start without valid project_id and/or auth_mfa",
+      config: config
   end
-
-  defp redact(%{key: key} = config) when is_binary(key) do
-    Map.put(config, :key, "[FILTERED]")
-  end
-
-  defp redact(config), do: config
 
   # no on_response callback, ignore
-  def parse_result(_, _, nil, _notif), do: :ok
+  def parse_result(_id, _response, nil, _notif), do: :ok
 
-  def parse_result(ids, %{"results" => results}, on_response, notification) do
-    ResultParser.parse(ids, results, on_response, notification)
+  def parse_result(_id, %{"name" => name}, on_response, notif) do
+    process_on_response(on_response, %{ notif | response: :success})
   end
 
-  def parse_result(id, %{"message_id" => _} = result, on_response, notification)
-      when is_binary(id) do
-    parse_result([id], %{"results" => [result]}, on_response, notification)
+  def parse_result(_id, %{"error" => error}, on_response, notif) do
+    process_on_response(on_response, %{ notif | response: parse_error(error)})
   end
 
   def parse_error(data) do

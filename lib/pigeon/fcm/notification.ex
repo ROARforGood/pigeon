@@ -426,24 +426,20 @@ defimpl Pigeon.Encodable, for: Pigeon.FCM.Notification do
   end
 
   @doc false
-  def encode_requests(%{registration_id: regid} = notif)
-      when is_binary(regid) do
-    encode_requests(%{notif | registration_id: [regid]})
-  end
+  def encode_requests(%{registration_id: regid} = notif) when is_binary(regid) do
+    payload = %{
+      "message" => %{
+        "token" => regid,
+        "data" => notif.payload["data"],
+        "android" => %{
+          "priority" => to_string(notif.priority),
+          "ttl" => "#{notif.time_to_live}s",
+          "collapseKey" => notif.collapse_key,
+        }
+      }
+    }
 
-  def encode_requests(%{registration_id: regid} = notif) when is_list(regid) do
-    regid
-    |> recipient_attr()
-    |> Map.merge(notif.payload)
-    |> encode_attr("priority", to_string(notif.priority))
-    |> encode_attr("time_to_live", notif.time_to_live)
-    |> encode_attr("collapse_key", notif.collapse_key)
-    |> encode_attr("restricted_package_name", notif.restricted_package_name)
-    |> encode_attr("dry_run", notif.dry_run)
-    |> encode_attr("content_available", notif.content_available)
-    |> encode_attr("mutable_content", notif.mutable_content)
-    |> encode_attr("condition", notif.condition)
-    |> Pigeon.json_library().encode!()
+    Pigeon.json_library().encode!(payload)
   end
 
   defp encode_attr(map, _key, nil), do: map
