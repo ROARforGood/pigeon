@@ -178,12 +178,16 @@ defimpl Pigeon.Configurable, for: Pigeon.FCM.Config do
 
   def parse_error(data) do
     case Pigeon.json_library().decode(data) do
-      {:ok, response} ->
-        response["reason"] |> Macro.underscore() |> String.to_existing_atom()
+      {:ok, %{"reason" => reason}} when is_binary(reason) ->
+        Macro.underscore(reason) |> String.to_existing_atom()
+
+      {:ok, error} ->
+        Logger.error("JSON parse failed: #{inspect(error)}, body: #{inspect(data)}")
+        :unspecified_error
 
       error ->
-        "JSON parse failed: #{inspect(error)}, body: #{inspect(data)}"
-        |> Logger.error()
+        Logger.error("JSON parse failed: #{inspect(error)}, body: #{inspect(data)}")
+        :unspecified_error
     end
   end
 
